@@ -1,0 +1,346 @@
+# AkbarStudios POS - Ubuntu Installation Guide
+
+## Server Requirements
+- Ubuntu 20.04 or later
+- PHP 8.0 or higher
+- Nginx
+- MySQL 8.0 or MariaDB
+- Composer
+- Node.js (optional for assets)
+
+## Step-by-Step Installation
+
+### 1. Update System
+```bash
+sudo apt update && sudo apt upgrade -y
+```
+
+### 2. Install Required PHP Extensions
+```bash
+sudo apt install php8.1 php8.1-fpm php8.1-mysql php8.1-xml php8.1-gd php8.1-curl php8.1-zip php8.1-mbstring php8.1-intl php8.1-bcmath php8.1-soap php8.1-tokenizer php8.1-json php8.1-fileinfo -y
+```
+
+### 3. Install Composer
+```bash
+curl -sS https://getcomposer.org/installer | php
+sudo mv composer.phar /usr/local/bin/composer
+sudo chmod +x /usr/local/bin/composer
+```
+
+### 4. Clone Repository
+```bash
+cd /var/www
+sudo git clone https://github.com/anauwal2/ultimate_pos.git pos.akbarstudios.com
+cd pos.akbarstudios.com
+```
+
+### 5. Set Proper Permissions
+```bash
+sudo chown -R www-data:www-data /var/www/pos.akbarstudios.com
+sudo chmod -R 755 /var/www/pos.akbarstudios.com
+sudo chmod -R 775 /var/www/pos.akbarstudios.com/storage
+sudo chmod -R 775 /var/www/pos.akbarstudios.com/bootstrap/cache
+```
+
+### 6. Install Dependencies
+```bash
+cd /var/www/pos.akbarstudios.com
+sudo -u www-data composer install --no-dev --optimize-autoloader
+```
+
+### 7. Configure Environment File
+```bash
+sudo -u www-data cp .env.example .env
+sudo -u www-data nano .env
+```
+
+**Edit .env file with these values:**
+```env
+APP_NAME="AkbarStudios POS"
+APP_ENV=production
+APP_KEY=
+APP_DEBUG=false
+APP_URL=http://pos.akbarstudios.com
+
+DB_CONNECTION=mysql
+DB_HOST=188.166.214.90
+DB_PORT=3306
+DB_DATABASE=POS
+DB_USERNAME=dev
+DB_PASSWORD=Operation1996!
+
+MAIL_MAILER=smtp
+MAIL_HOST=smtp.gmail.com
+MAIL_PORT=587
+MAIL_USERNAME=your_email@gmail.com
+MAIL_PASSWORD=your_app_password
+MAIL_ENCRYPTION=tls
+MAIL_FROM_ADDRESS=your_email@gmail.com
+MAIL_FROM_NAME="AkbarStudios POS"
+
+# Cache and Session
+CACHE_DRIVER=file
+SESSION_DRIVER=file
+QUEUE_CONNECTION=sync
+
+# Backup Configuration
+BACKUP_DISK=local
+
+# Security
+BCRYPT_ROUNDS=12
+```
+
+### 8. Generate Application Key
+```bash
+cd /var/www/pos.akbarstudios.com
+sudo -u www-data php artisan key:generate
+```
+
+### 9. Test Database Connection
+```bash
+sudo -u www-data php artisan tinker
+# In tinker, run: DB::connection()->getPdo();
+# If successful, type: exit
+```
+
+### 10. Run Database Migrations
+```bash
+sudo -u www-data php artisan migrate
+sudo -u www-data php artisan db:seed
+```
+
+### 11. Install Laravel Passport
+```bash
+sudo -u www-data php artisan passport:install
+```
+
+### 12. Create Storage Link
+```bash
+sudo -u www-data php artisan storage:link
+```
+
+### 13. Clear and Cache Configuration
+```bash
+sudo -u www-data php artisan config:cache
+sudo -u www-data php artisan route:cache
+sudo -u www-data php artisan view:cache
+```
+
+### 14. Configure Nginx
+```bash
+sudo nano /etc/nginx/sites-available/pos.akbarstudios.com
+```
+
+**Nginx Configuration:**
+```nginx
+server {
+    listen 80;
+    server_name pos.akbarstudios.com;
+    root /var/www/pos.akbarstudios.com/public;
+
+    add_header X-Frame-Options "SAMEORIGIN";
+    add_header X-Content-Type-Options "nosniff";
+
+    index index.php;
+
+    charset utf-8;
+
+    # Handle Laravel routes
+    location / {
+        try_files $uri $uri/ /index.php?$query_string;
+    }
+
+    # Handle PHP files
+    location ~ \.php$ {
+        fastcgi_pass unix:/var/run/php/php8.1-fpm.sock;
+        fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
+        include fastcgi_params;
+        fastcgi_hide_header X-Powered-By;
+    }
+
+    # Security headers
+    location ~ /\.(?!well-known).* {
+        deny all;
+    }
+
+    # Handle uploads
+    client_max_body_size 100M;
+
+    # Gzip compression
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_types text/plain text/css text/xml text/javascript application/javascript application/xml+rss application/json;
+
+    # Cache static files
+    location ~* \.(jpg|jpeg|png|gif|ico|css|js|woff|woff2|ttf|svg)$ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+}
+```
+
+### 15. Enable Nginx Site
+```bash
+sudo ln -s /etc/nginx/sites-available/pos.akbarstudios.com /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+### 16. Configure PHP-FPM
+```bash
+sudo nano /etc/php/8.1/fpm/php.ini
+```
+
+**Important PHP settings to update:**
+```ini
+upload_max_filesize = 100M
+post_max_size = 100M
+max_execution_time = 300
+memory_limit = 512M
+max_input_vars = 3000
+```
+
+**Restart PHP-FPM:**
+```bash
+sudo systemctl restart php8.1-fpm
+```
+
+### 17. Set Up Cron Jobs (for scheduled tasks)
+```bash
+sudo crontab -e -u www-data
+```
+
+**Add this line:**
+```bash
+* * * * * cd /var/www/pos.akbarstudios.com && php artisan schedule:run >> /dev/null 2>&1
+```
+
+### 18. Create Admin User (Optional - via web installer or command)
+**Via Command Line:**
+```bash
+cd /var/www/pos.akbarstudios.com
+sudo -u www-data php artisan tinker
+```
+
+**In tinker:**
+```php
+$user = new App\User();
+$user->surname = 'Admin';
+$user->first_name = 'System';
+$user->username = 'admin';
+$user->email = 'admin@akbarstudios.com';
+$user->password = bcrypt('admin123');
+$user->language = 'en';
+$user->status = 'active';
+$user->save();
+exit
+```
+
+### 19. Final Security Steps
+```bash
+# Set final permissions
+sudo chown -R www-data:www-data /var/www/pos.akbarstudios.com
+sudo find /var/www/pos.akbarstudios.com -type f -exec chmod 644 {} \;
+sudo find /var/www/pos.akbarstudios.com -type d -exec chmod 755 {} \;
+sudo chmod -R 775 /var/www/pos.akbarstudios.com/storage
+sudo chmod -R 775 /var/www/pos.akbarstudios.com/bootstrap/cache
+
+# Secure sensitive files
+sudo chmod 600 /var/www/pos.akbarstudios.com/.env
+```
+
+### 20. Test Installation
+Visit: http://pos.akbarstudios.com
+
+**Expected behavior:**
+- If using web installer: You'll see installation wizard
+- If database is already set up: You'll see login page
+
+**Default login (if created via command):**
+- Username: admin
+- Password: admin123
+
+## Troubleshooting
+
+### Common Issues:
+
+1. **Permission Errors:**
+```bash
+sudo chown -R www-data:www-data /var/www/pos.akbarstudios.com
+sudo chmod -R 775 /var/www/pos.akbarstudios.com/storage
+```
+
+2. **Database Connection Issues:**
+```bash
+# Test connection
+sudo -u www-data php artisan tinker
+DB::connection()->getPdo();
+```
+
+3. **500 Error:**
+```bash
+# Check Laravel logs
+sudo tail -f /var/www/pos.akbarstudios.com/storage/logs/laravel.log
+
+# Check Nginx logs
+sudo tail -f /var/log/nginx/error.log
+```
+
+4. **Clear Cache Issues:**
+```bash
+sudo -u www-data php artisan config:clear
+sudo -u www-data php artisan cache:clear
+sudo -u www-data php artisan route:clear
+sudo -u www-data php artisan view:clear
+```
+
+### Performance Optimization:
+
+1. **Enable OPcache:**
+```bash
+sudo nano /etc/php/8.1/fpm/php.ini
+```
+Add:
+```ini
+opcache.enable=1
+opcache.memory_consumption=128
+opcache.interned_strings_buffer=8
+opcache.max_accelerated_files=4000
+opcache.revalidate_freq=2
+opcache.fast_shutdown=1
+```
+
+2. **Optimize Composer Autoloader:**
+```bash
+sudo -u www-data composer dump-autoload --optimize
+```
+
+## Post-Installation
+
+1. **Configure Business Settings** via web interface
+2. **Set up payment gateways** if needed
+3. **Configure email settings** for notifications
+4. **Set up backups** (automated via Laravel scheduler)
+5. **Configure SSL certificate** (recommended for production)
+
+## SSL Setup (Optional but Recommended)
+
+```bash
+# Install Certbot
+sudo apt install certbot python3-certbot-nginx
+
+# Get SSL certificate
+sudo certbot --nginx -d pos.akbarstudios.com
+
+# Test auto-renewal
+sudo certbot renew --dry-run
+```
+
+## Important Notes
+
+- Change default admin password immediately after first login
+- Regularly backup your database and uploads
+- Keep the application updated
+- Monitor error logs regularly
+- Consider setting up fail2ban for additional security
